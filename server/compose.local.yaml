@@ -1,0 +1,4 @@
+services:
+  database:
+    ports:
+      - "127.0.0.1:15438:5432"

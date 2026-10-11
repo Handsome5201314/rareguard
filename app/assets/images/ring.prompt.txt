@@ -1,0 +1,5 @@
+Use case: product-mockup / image-to-image.
+Asset: reusable RareGuard device-binding product image, NO TEXT or UI.
+Image1 is the genuine ECTRI official gunmetal ring bitmap. Preserve the EXACT dark brushed metal ring shape, proportions, visible inner windows, and three-quarter orientation. Improve only lighting and rendering. Do not claim a model or invent details, no printed brand, no screen, no extra sensor.
+Image2 is RareGuard approved home screen and sets the navy-mint color world.
+One photorealistic ring centered at 62% frame height on a perfectly plain DARK NAVY #102E3A studio ground, with a modest natural contact shadow, subtle neutral rim light that separates the outer contour and clear silver-gray inner edge. Native raster, landscape 1536x1024, subject fully inside frame with generous clean margin. No pedestal, hands, decorative orbit, fog, vapor, neon, text, fake transparency checkerboard or watermark. Background intentionally opaque and uniform for a dark-theme component. Render a real hardware catalog object, restrained and physically believable.

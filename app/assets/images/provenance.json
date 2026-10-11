@@ -1,0 +1,14 @@
+{
+  "reference_sources": "Official ECTRI ring and moon-cloud imagery, and the project RareGuard UI reference. Reference originals are not included in this repository; provenance is not a third-party license grant.",
+  "source_manifest": "delivery-manifest.json",
+  "model": "gpt-image-2",
+  "method": "image-to-image, images/edits",
+  "background": "opaque navy RGB PNG; not transparent cutouts",
+  "usage": "Standalone imagery only; UI controls and all health values are rendered from code and real data.",
+  "assets": [
+    {"file": "ring.png", "source": "assets/07-ring-product.png", "prompt": "ring.prompt.txt"},
+    {"file": "night.png", "source": "assets/08-night-illustration.png", "prompt": "night.prompt.txt"},
+    {"file": "assistant.png", "source": "assets/09-assistant-avatar.png", "prompt": "assistant.prompt.txt"}
+  ],
+  "metadata": "Exact generation prompts are embedded in each PNG. Flutter launcher icons are pre-existing framework assets."
+}

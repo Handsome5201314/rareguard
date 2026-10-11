@@ -1,0 +1,86 @@
+name: Source checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python tools/check_public_tree.py
+      - name: Verify and run Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=https://github.com/gitleaks/gitleaks/releases/download/v8.30.1
+          curl -fsSLO "$release/gitleaks_8.30.1_linux_x64.tar.gz"
+          curl -fsSLO "$release/gitleaks_8.30.1_checksums.txt"
+          awk '$2 == "gitleaks_8.30.1_linux_x64.tar.gz"' gitleaks_8.30.1_checksums.txt | sha256sum --check
+          tar -xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
+          ./gitleaks git . --redact --no-banner
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-pub
+      - run: flutter test --no-pub
+      - run: bash scripts/check_core.sh
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: rareguard
+          POSTGRES_DB: rareguard
+          POSTGRES_PASSWORD: ci-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rareguard -d rareguard"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql+psycopg://rareguard:ci-test-only@127.0.0.1:5432/rareguard
+      TEST_DATABASE_URL: postgresql+psycopg://rareguard:ci-test-only@127.0.0.1:5432/rareguard_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m alembic upgrade head
+      - name: Create disposable test database
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          url = os.environ['DATABASE_URL'].replace('postgresql+psycopg://', 'postgresql://', 1)
+          with psycopg.connect(url, autocommit=True) as connection:
+              connection.execute('CREATE DATABASE rareguard_test')
+          PY
+      - run: python -m pytest -q

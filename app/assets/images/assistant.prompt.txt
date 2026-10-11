@@ -1,0 +1,4 @@
+Use case: stylized-concept / image-to-image.
+Asset: reusable RareGuard family-assistant avatar, NO TEXT or UI.
+Image1 ECTRI moon-cloud pictogram is style reference only. Image2 approved RareGuard UI defines muted mint on navy palette.
+Design ONE simple softly sculpted matte mint crescent moon leaning beside one small warm ivory glowing seed of light, a calm companion symbol. No face, eyes, mouth, humanoid robot, medical cross, shield, heartbeat or letters. The moon silhouette must read at 32 pixels. A clean icon-sized composition with no fine details. Gentle dimensional shading and physically modest light. Perfectly uniform solid dark navy #102E3A opaque background, no disc or rounded-square plaque, generous 20% margin on all sides, no shadow beyond the immediate base, no checkerboard transparency. Centered 1024x1024 PNG, premium quiet native-app illustration asset, no watermark, no border or typography.

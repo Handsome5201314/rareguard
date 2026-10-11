@@ -1,0 +1,55 @@
+# Private configuration and credentials
+**/.env
+**/.env.*
+!**/.env.example
+**/runtime/
+**/secrets/
+*.pem
+*.key
+*.pub
+*.p12
+*.pfx
+*.jks
+*.keystore
+**/key.properties
+**/local.properties
+
+# Captured health data and local diagnostics
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.csv
+*.log
+*.har
+*.pcap
+*.pcapng
+**/output/
+**/exports/
+**/captures/
+**/screenshots/
+**/.impeccable/
+
+# Generated build and editor files
+**/build/
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/.gradle/
+**/.cxx/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.idea/
+*.iml
+*.pyc
+*.class
+*.apk
+*.aab
+**/coverage/
+.DS_Store
+
+# Vendor reverse-engineering inputs are not part of this repository
+**/ectri-reverse/
+**/jadx/
+**/apktool/
