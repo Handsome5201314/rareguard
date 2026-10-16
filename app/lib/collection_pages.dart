@@ -152,20 +152,18 @@ mixin _CollectionPages on State<Home> {
       const SizedBox(height: 12),
       EntryRow(
         title: '三轴运动数据',
-        detail: '戒指连续读取已实测 · 本 App 尚未接入',
+        detail: '服务端支持 acc · 当前戒指帧尚未核对',
         icon: Icons.motion_photos_on_outlined,
         onTap: () => h.openDetail('motion'),
       ),
-      h.heading('远程提醒'),
+      h.heading('同步与提醒'),
       Text(
         '${c.state['syncState'] ?? '未配对'} · ${c.state['pending'] ?? 0} 条待同步记录',
       ),
       if (c.state['remoteError']?.toString().isNotEmpty == true)
         h.message('${c.state['remoteError']}', warning: true),
       ...h.alertWidgets(),
-      if (c.rows('alerts').isEmpty)
-        h.empty('暂未收到提醒', '查看设置中的配对与远程提醒授权。收到与查看确认会分别记录。'),
-      h.button('检查远程提醒', () => h.run(() => c.call('sync')), icon: Icons.sync),
+      h.button('同步设备记录', () => h.run(() => c.call('sync')), icon: Icons.sync),
     ];
   }
 
@@ -489,7 +487,7 @@ mixin _CollectionPages on State<Home> {
       const SizedBox(height: 12),
       EntryRow(
         title: '服务与隐私',
-        detail: '公网配对、独立授权、实验规则与数据管理',
+        detail: '病程配对、Octop、实验规则与数据管理',
         icon: Icons.tune,
         onTap: () => h.openDetail('settings'),
       ),
@@ -511,7 +509,7 @@ mixin _CollectionPages on State<Home> {
 
   List<Widget> motionInfo() => [
     const PageTitle('三轴运动数据', '连续数值流，可用于研究动作的节律和持续时间。'),
-    h.message('当前戒指的连续三轴读取已在电脑端短时实测；本 App 尚未接入该采集通道。'),
+    h.message('病程服务端已能承载 acc 的 x/y/z 三轴对象；当前 MR11 EFE 与参考 SDK 没有经过核对的三轴 BLE 数据回调，因此 App 不会伪造或猜测三轴值。'),
     h.heading('与双击操作的区别'),
     const Text('翻页、拍照由戒指识别动作后触发预设操作。连续三轴读取提供随时间变化的运动数值，适合进一步分析动作过程。'),
     h.heading('当前验证边界'),

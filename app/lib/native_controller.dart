@@ -39,19 +39,6 @@ class NativeController extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> api(
-    String path, {
-    String method = 'GET',
-    Map<String, dynamic>? body,
-  }) async {
-    final data = await call('api', {
-      'method': method,
-      'path': path,
-      'body': ?body,
-    });
-    return Map<String, dynamic>.from(data as Map);
-  }
-
   Future<void> start() async {
     if (await call('permissions') != true) {
       error = '蓝牙权限未授予，请在系统设置中允许后重试';

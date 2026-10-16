@@ -1,0 +1,12 @@
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
+import { startFamilyServer } from "./http.js";
+import { familyServerOptions } from "./config.js";
+if (existsSync(".env.family-public")) loadEnvFile(".env.family-public");
+const options = familyServerOptions(process.env, process.cwd(), process.argv.slice(2));
+const app = await startFamilyServer(options);
+process.stdout.write(`病程本本地服务: ${app.url}\n仅监听本机；关闭终端会停止服务。\n`);
+process.stdout.write(options.webRoot ? "网页托管已启用。\n" : "独立 API 模式：/api/family、/mcp/family、/healthz。\n");
+if (process.env.FAMILY_PUBLIC_ORIGIN) process.stdout.write(`公网入口: ${process.env.FAMILY_PUBLIC_ORIGIN}\n需保持公网隧道运行。首个管理员只能在本机建立。\n`);
+const stop = () => { void app.close().then(() => process.exit(0), () => process.exit(1)); };
+process.once("SIGINT", stop); process.once("SIGTERM", stop);

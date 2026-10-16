@@ -1,0 +1,35 @@
+{
+  "name": "@bingcheng/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent family medical timeline backend with HTTP and MCP interfaces",
+  "engines": { "node": ">=24" },
+  "exports": {
+    "./shared/types": {
+      "types": "./dist/src/shared/types.d.ts",
+      "default": "./dist/src/shared/types.js"
+    },
+    "./shared/connection-package": {
+      "types": "./dist/src/shared/connection-package.d.ts",
+      "default": "./dist/src/shared/connection-package.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "start": "node dist/src/server/main.js",
+    "mcp": "node dist/src/server/mcp-stdio.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "decimal.js": "10.6.0",
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.25.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}

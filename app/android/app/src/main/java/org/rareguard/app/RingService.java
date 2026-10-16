@@ -28,11 +28,12 @@ public final class RingService extends Service {
     private boolean writing,scanning,night,networkBusy,dataMaintenance;
     private int generation,writeSerial,battery=-1,retries;
     private long lastLive,sessionStarted;
-    private String state="未连接",error="",deviceId,address,name="",firmware="",operation="",syncState="未配对",remoteError="";
-    private JSONArray remoteAlerts=new JSONArray();
+    private String state="未连接",error="",wearingReminder="",deviceId,address,name="",firmware="",operation="",syncState="未配对",remoteError="";
 
     @Override public void onCreate(){
-        super.onCreate();instance=this;store=new LocalStore(this);api=new RemoteApi(this);
+        super.onCreate();instance=this;store=new LocalStore(this);api=new RemoteApi(this,store);
+        if(api.paired()){try{store.bindDravet(api.scope(),api.localId());}catch(Exception e){remoteError="配对归属无法恢复，已暂停上传";}}
+        if(!api.error().isEmpty())remoteError=api.error();
         adapter=getSystemService(BluetoothManager.class).getAdapter();
         NotificationManager nm=getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel("monitor","采集状态",NotificationManager.IMPORTANCE_LOW));
@@ -53,7 +54,11 @@ public final class RingService extends Service {
         return new Notification.Builder(this,channel).setSmallIcon(android.R.drawable.ic_menu_info_details).setContentTitle("RareGuard 夜间观察").setContentText(text).setContentIntent(p).setAutoCancel(!channel.equals("monitor")).build();
     }
     private void emit(){if(changed!=null)changed.run();}
-    private void failure(String message){error=message;emit();}
+    private void failure(String message){
+        if(message!=null&&message.contains("未正确佩戴")){wearingReminder=message;error="";}
+        else error=message==null?"":message;
+        emit();
+    }
     public void scan(){
         if(adapter==null||!adapter.isEnabled())throw new IllegalStateException("请先开启蓝牙");
         if(scanning)return;found.clear();scanning=true;error="";emit();
@@ -93,7 +98,7 @@ public final class RingService extends Service {
             });}
             @Override public void onDescriptorWrite(BluetoothGatt g,BluetoothGattDescriptor d,int status){run(()->{
                 if(status!=0){lost("通知订阅失败（"+status+"）");return;}
-                state="已连接";error="";retries=0;enqueue(EfeProtocol.info());enqueue(EfeProtocol.battery());emit();
+                state="已连接";error="";wearingReminder="";retries=0;enqueue(EfeProtocol.info());enqueue(EfeProtocol.battery());emit();
                 if(night)main.postDelayed(()->startMeasure("hr",60),1200);
             });}
             @Override public void onCharacteristicWrite(BluetoothGatt g,BluetoothGattCharacteristic c,int status){run(()->{
@@ -154,7 +159,7 @@ public final class RingService extends Service {
     }
     public void clearLocal(){
         if(networkBusy||night||measurement.isActive()||gatt!=null)throw new IllegalStateException("请先停止测量并断开戒指，等待同步结束后再删除");
-        store.clearHealthData();lastLive=0;rule.reset();remoteAlerts=new JSONArray();emit();
+        store.clearHealthData();lastLive=0;rule.reset();emit();
     }
     public String exportLocal() throws JSONException {
         JSONArray rows=new JSONArray();for(LocalStore.Sample row:store.allSamples())rows.put(new JSONObject(sampleMap(row)));
@@ -174,7 +179,11 @@ public final class RingService extends Service {
         if(f.kind.equals("health")&&!f.values.isEmpty()){
             store.save(deviceId,f,raw,System.currentTimeMillis());measurement.accept(f,SystemClock.elapsedRealtime());
             for(EfeProtocol.Value v:f.values){
-                if(f.live&&v.value!=0)lastLive=System.currentTimeMillis();
+                if(f.live&&Double.isFinite(v.value)&&v.value>0){
+                    lastLive=System.currentTimeMillis();
+                    // A valid live sensor result is the device's positive wear signal.
+                    wearingReminder="";
+                }
                 if(rule.feed(v.metric,v.value,f.source,v.value==0?"invalid":"unknown",SystemClock.elapsedRealtime()))alert("experimental_change","已达到你设置的实验边界与持续时间；请结合实际状态观察");
             }
         }
@@ -197,34 +206,34 @@ public final class RingService extends Service {
     private void alert(String kind,String text){
         getSystemService(NotificationManager.class).notify((int)(System.currentTimeMillis()%100000),notification(text,"alerts"));
         if(deviceId==null)return;
-        try {String sid=store.serverId(deviceId);JSONObject j=new JSONObject().put("id",UUID.randomUUID().toString()).put("kind",kind).put("text",text).put("evidence",new JSONObject().put("quality","unknown").put("last_live_received_ms",lastLive));
-            if(sid!=null)j.put("device_id",sid);store.queueAlert(j);
-        }catch(JSONException e){failure("提醒记录构造失败");}
+        store.event(deviceId,"alarm_requested",text,System.currentTimeMillis());
     }
-    public void remoteTest(){alert("delivery_test","跨网络提醒测试；请在另一台设备确认收到");sync();}
+    public String beginPairing(){
+        if(!state.equals("已连接")||deviceId==null)throw new IllegalStateException("请先连接要绑定的戒指");
+        beginDataMaintenance();return deviceId;
+    }
+    public JSONObject pair(String raw,String localId) throws Exception {
+        JSONObject status=api.pair(raw,localId);store.bindDravet(api.scope(),localId);return status;
+    }
     public void sync(){
-        if(networkBusy||dataMaintenance)return;networkBusy=true;syncState="同步中";emit();
-        String local=deviceId;network.execute(()->{
+        if(networkBusy||dataMaintenance)return;
+        if(!api.paired()){syncState="未配对";if(!api.error().isEmpty())remoteError=api.error();emit();return;}
+        networkBusy=true;syncState="同步中";emit();
+        String local=api.localId(),scope=api.scope();network.execute(()->{
             try {
-                JSONObject me=api.request("GET","/v1/me",null);JSONObject consents=me.getJSONObject("consents");
-                if(local!=null&&consents.optBoolean("upload")){
-                    String sid=store.serverId(local);
-                    if(sid==null){JSONObject d=api.request("POST","/v1/devices",new JSONObject().put("local_id",local).put("model",name).put("firmware_version",firmware).put("protocol_version",EfeProtocol.VERSION));sid=d.getString("device_id");store.bindServer(local,sid);}
-                    String payload=store.createBatch(local,sid);
-                    if(payload!=null){JSONObject p=new JSONObject(payload),result=api.request("POST","/v1/measurement-batches",p);
-                        if(!result.optString("status").equals("committed")||!result.optString("batch_id").equals(p.getString("batch_id")))throw new IllegalStateException("服务端未确认该批次持久化");store.batchCommitted(p.getString("batch_id"));}
-                    for(JSONObject o:store.observations(local,sid)){api.request("POST","/v1/observations",o);store.observationCommitted(o.getString("id"));}
+                store.bindDravet(scope,local);
+                String payload=store.createBatch(local,scope);
+                if(payload!=null){JSONObject p=new JSONObject(payload),result=api.request("/api/dravet/batches",p);
+                    int count=p.getJSONArray("samples").length();
+                    if(!result.optString("batchId").equals(p.getString("batchId"))||result.optInt("received",-1)!=count||result.optInt("inserted",-1)+result.optInt("duplicates",-1)!=count||result.isNull("committedAt"))
+                        throw new IllegalStateException("服务端未确认该批次持久化，保留补传队列");
+                    java.time.Instant.parse(result.getString("committedAt"));store.batchCommitted(p.getString("batchId"),scope);
                 }
-                if(consents.optBoolean("remote_alerts")){
-                    for(JSONObject j:store.pendingAlerts()){if(!j.has("device_id")&&local!=null){String sid=store.serverId(local);if(sid!=null)j.put("device_id",sid);}if(!j.has("device_id"))continue;
-                        api.request("POST","/v1/alerts",j);store.alertCommitted(j.getString("id"));}
-                    JSONArray rows=api.request("GET","/v1/alerts",null).getJSONArray("data");
-                    for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);if(row.isNull("received_at")){
-                        getSystemService(NotificationManager.class).notify(row.getString("id").hashCode(),notification(row.getString("text"),"alerts"));
-                        api.request("POST","/v1/alerts/"+row.getString("id")+"/receipt",new JSONObject().put("status","received"));}}
-                    main.post(()->remoteAlerts=rows);
+                for(JSONObject e:store.pendingEvents(scope)){JSONObject result=api.request("/api/dravet/events",e);
+                    if(!result.optBoolean("stored")||!e.getString("id").equals(result.optString("id")))throw new IllegalStateException("服务端未确认事件存储，保留补传队列");
+                    store.eventCommitted(e.getString("id"),scope);
                 }
-                main.post(()->{syncState="已同步 · "+store.pendingCount()+" 条待上传";remoteError="";});
+                main.post(()->{syncState="已同步 · "+store.pendingCount()+" 条样本待上传";remoteError="";});
             }catch(Exception e){main.post(()->{syncState="同步未完成";remoteError=safeError(e);});}
             finally{main.post(()->{networkBusy=false;emit();});}
         });
@@ -242,11 +251,11 @@ public final class RingService extends Service {
         if(++tickCount%15==0&&!api.url().isEmpty())sync();emit();main.postDelayed(this,1000);
     }};
     public Map<String,Object> snapshot(){
-        Map<String,Object> s=new HashMap<>();s.put("state",state);s.put("error",error);s.put("deviceId",deviceId);s.put("name",name);s.put("firmware",firmware);
+        Map<String,Object> s=new HashMap<>();s.put("state",state);s.put("error",error);s.put("wearingReminder",wearingReminder);s.put("deviceId",deviceId);s.put("name",name);s.put("firmware",firmware);
         s.put("battery",battery);s.put("scanning",scanning);s.put("devices",new ArrayList<>(found.values()));s.put("measuring",measurement.isActive());s.put("operation",operation);
         s.put("night",night);s.put("lastLive",lastLive);s.put("pending",store.pendingCount());s.put("syncState",syncState);s.put("remoteError",remoteError);s.put("serverUrl",api.url());
-        s.put("experimentEnabled",rule.enabled);s.put("alerts",jsonValue(remoteAlerts));
-        s.put("serverDeviceId",deviceId==null?null:store.serverId(deviceId));
+        s.put("experimentEnabled",rule.enabled);s.put("legacyPending",store.legacyPending());
+        try{s.putAll((Map<String,Object>)jsonValue(api.status()));}catch(JSONException e){s.put("remoteError","无法读取配对状态");}
         String saved=getSharedPreferences("state",0).getString("experiment",null);
         if(saved!=null){try{s.put("experiment",jsonValue(new JSONObject(saved)));}catch(JSONException e){s.put("error","保存的实验规则无法读取，请重新设置");}}
         NotificationManager nm=getSystemService(NotificationManager.class);
@@ -261,7 +270,6 @@ public final class RingService extends Service {
     public List<Map<String,Object>> samples(String key,boolean liveOnly){List<Map<String,Object>> result=new ArrayList<>();for(LocalStore.Sample r:store.samples(deviceId,key,System.currentTimeMillis()-24*3600000L,Long.MAX_VALUE,liveOnly,500))result.add(sampleMap(r));return result;}
     private static Map<String,Object> sampleMap(LocalStore.Sample r){Map<String,Object> v=new HashMap<>();v.put("id",r.id);v.put("metric",r.metric);v.put("value",r.value);v.put("unit",r.unit);v.put("source",r.source);v.put("quality",r.quality);v.put("receivedMs",r.receivedMs);v.put("deviceLocalTime",r.deviceLocalTime);v.put("syncState",r.syncState);return v;}
     public void observe(String text,long when){store.event(deviceId,"observation",text,when);emit();}
-    public RemoteApi api(){return api;}
     public void beginDataMaintenance(){
         if(networkBusy||night||measurement.isActive()||dataMaintenance)throw new IllegalStateException("请先结束采集并等待同步完成，再删除服务器记录");
         dataMaintenance=true;

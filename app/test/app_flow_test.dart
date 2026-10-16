@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,21 +9,29 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   Map<String, dynamic> state = {};
   final calls = <MethodCall>[];
-  Future<dynamic> Function(Map<dynamic, dynamic>)? api;
+  bool failPairing = false;
+  bool failWeb = false;
   setUp(() {
     state = {'state': '服务未启动'};
     calls.clear();
-    api = null;
+    failPairing = false;
+    failWeb = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('rareguard/native'), (
           call,
         ) async {
           calls.add(call);
-          if (call.method == 'api') {
-            if (api == null) {
-              throw PlatformException(code: 'unpaired', message: '请先配对');
-            }
-            return api!(call.arguments as Map);
+          if (call.method == 'pair' && failPairing) {
+            throw PlatformException(
+              code: 'pair_failed',
+              message: '配对码已失效，请重新生成',
+            );
+          }
+          if (call.method == 'openUrl' && failWeb) {
+            throw PlatformException(code: 'web_failed', message: '无法打开网页，请重试');
+          }
+          if (call.method == 'pair') {
+            state = {...state, 'paired': true};
           }
           return state;
         });
@@ -69,39 +75,56 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'Public endpoint and authenticated web entries remain reachable',
-    (tester) async {
-      state['serverUrl'] = 'https://rareguard.tongyimoheai.top/api';
-      await mount(tester);
-      await settings(tester);
-      expect(
-        tester
-            .widget<TextField>(find.widgetWithText(TextField, 'HTTPS 业务入口'))
-            .controller!
-            .text,
-        'https://rareguard.tongyimoheai.top/api',
-      );
-      await reach(tester, find.text('智能体与远程提醒'));
-      await tester.tap(find.text('智能体与远程提醒'));
-      await tester.pumpAndSettle();
-      await reach(tester, find.text('智能体设置'));
-      expect(find.text('智能体设置'), findsOneWidget);
-    },
-  );
-  testWidgets('Saved endpoint takes priority over public default', (
+  testWidgets('Octop and parent management open in-app without BLE startup', (
     tester,
   ) async {
-    state['serverUrl'] = 'https://family.example/api';
+    await mount(tester);
+    await tester.tap(find.text('助手'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('打开 Octop 助手'));
+    await tester.pumpAndSettle();
+    expect(calls.last.arguments['url'], publicOctopUrl);
+    await tester.tap(find.text('打开病程授权管理'));
+    await tester.pumpAndSettle();
+    expect(calls.last.arguments['url'], publicConsoleUrl);
+    expect(
+      calls.where((c) => c.method == 'api' || c.method == 'startService'),
+      isEmpty,
+    );
+  });
+  testWidgets(
+    'Pairing uses full phone package and clears field after success',
+    (tester) async {
+      await mount(tester);
+      await settings(tester);
+      const package = '{"kind":"dravet-device-pairing","version":1}';
+      final field = find.widgetWithText(TextField, '粘贴手机配对包 JSON');
+      await tester.enterText(field, package);
+      await reach(tester, find.text('配对或续期手机上传'));
+      await tester.tap(find.text('配对或续期手机上传'));
+      await tester.pumpAndSettle();
+      expect(calls.singleWhere((c) => c.method == 'pair').arguments, {
+        'package': package,
+      });
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    },
+  );
+  testWidgets('Failed pairing keeps package for correction and shows error', (
+    tester,
+  ) async {
+    failPairing = true;
     await mount(tester);
     await settings(tester);
+    final field = find.widgetWithText(TextField, '粘贴手机配对包 JSON');
+    await tester.enterText(field, '{"kind":"dravet-device-pairing"}');
+    await reach(tester, find.text('配对或续期手机上传'));
+    await tester.tap(find.text('配对或续期手机上传'));
+    await tester.pumpAndSettle();
     expect(
-      tester
-          .widget<TextField>(find.widgetWithText(TextField, 'HTTPS 业务入口'))
-          .controller!
-          .text,
-      'https://family.example/api',
+      tester.widget<TextField>(field).controller!.text,
+      '{"kind":"dravet-device-pairing"}',
     );
+    expect(find.textContaining('配对码已失效'), findsOneWidget);
   });
   testWidgets('Connected scan list stays collapsed', (tester) async {
     state = {
@@ -119,7 +142,9 @@ void main() {
     expect(find.text('device-19'), findsNothing);
     expect(find.text('单次测量与历史'), findsOneWidget);
   });
-  testWidgets('Connected device page can reopen after scrolling', (tester) async {
+  testWidgets('Connected device page can reopen after scrolling', (
+    tester,
+  ) async {
     state = {
       'state': '已连接',
       'devices': [
@@ -318,73 +343,33 @@ void main() {
     expect(calls.map((c) => c.method), contains('sync'));
     expect(find.widgetWithText(TextField, '观察 / 处置备注'), findsNothing);
   });
-  testWidgets('Window changes clear previous server summary', (tester) async {
-    api = (args) async {
-      final path = args['path'] as String;
-      if (path == '/v1/me') {
-        return {
-          'devices': [
-            {'id': 'test-device'},
-          ],
-        };
-      }
-      if (path.startsWith('/v1/summaries/night')) {
-        return {'status': 'no_data', 'metrics': {}};
-      }
-      if (path.startsWith('/v1/measurements')) {
-        return {'data': [], 'next_cursor': null};
-      }
-      throw StateError('Unexpected API path');
-    };
+  testWidgets('Reports require parent webpage and never use old server API', (
+    tester,
+  ) async {
     await mount(tester);
     await reach(tester, find.text('查看夜间报告'));
     await tester.tap(find.text('查看夜间报告'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('生成数据摘要'));
+    await tester.tap(find.text('打开病程监测报告'));
     await tester.pumpAndSettle();
-    expect(find.text('该窗口无数据'), findsOneWidget);
-    await tester.tap(find.text('最近 12 小时'));
-    await tester.pumpAndSettle();
-    expect(find.text('该窗口无数据'), findsNothing);
-    expect(find.text('尚未生成摘要'), findsOneWidget);
+    expect(calls.last.method, 'openUrl');
+    expect(calls.last.arguments['url'], publicConsoleUrl);
+    expect(calls.where((c) => c.method == 'api'), isEmpty);
   });
-  testWidgets('Window change during AI poll ignores stale result', (
+  testWidgets('Web opening failure is visible and can be retried', (
     tester,
   ) async {
-    final pending = Completer<Map<String, dynamic>>();
-    api = (args) async {
-      final path = args['path'] as String;
-      if (path == '/v1/me') {
-        return {
-          'devices': [
-            {'id': 'test-device'},
-          ],
-          'consents': {'ai_analysis': true},
-        };
-      }
-      if (path == '/v1/conversations') return {'id': 'test-conversation'};
-      if (path.endsWith('/messages')) {
-        return {'request_id': 'test-request', 'status': 'running'};
-      }
-      if (path.startsWith('/v1/ai-requests/')) return pending.future;
-      throw StateError('Unexpected API path');
-    };
+    failWeb = true;
     await mount(tester);
     await tester.tap(find.text('助手'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, '你的问题'),
-      'test question',
-    );
-    await tester.tap(find.text('提交问答'));
+    await tester.tap(find.text('打开 Octop 助手'));
     await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 3));
-    await tester.tap(find.text('最近 12 小时'));
+    expect(find.textContaining('无法打开网页'), findsOneWidget);
+    failWeb = false;
+    await tester.tap(find.text('打开 Octop 助手'));
     await tester.pumpAndSettle();
-    pending.complete({'status': 'completed', 'answer': 'stale test answer'});
-    await tester.pumpAndSettle();
-    expect(find.text('stale test answer'), findsNothing);
-    expect(find.text('本次问答'), findsNothing);
+    expect(find.textContaining('无法打开网页'), findsNothing);
   });
   for (final width in [320.0, 800.0]) {
     testWidgets('All destinations render at width $width with large text', (

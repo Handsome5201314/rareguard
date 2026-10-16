@@ -55,12 +55,8 @@ public class MainActivity extends FlutterActivity {
                 if(call.method.equals("openUrl")){
                     String raw=call.argument("url");
                     if(raw==null)throw new IllegalArgumentException("网页地址尚未配置");
-                    android.net.Uri uri=android.net.Uri.parse(raw);
-                    if(!"https".equals(uri.getScheme())||!"rareguard.tongyimoheai.top".equals(uri.getHost())
-                        ||uri.getUserInfo()!=null||(uri.getPort()!=-1&&uri.getPort()!=443))
-                        throw new IllegalArgumentException("请使用已配置的公网 HTTPS 页面");
-                    try{startActivity(new Intent(Intent.ACTION_VIEW,uri));}
-                    catch(ActivityNotFoundException e){throw new IllegalStateException("没有可打开网页的浏览器，请安装浏览器后重试");}
+                    if(!org.rareguard.core.DravetPolicy.allowedWeb(raw)) throw new IllegalArgumentException("请使用已配置的公网 HTTPS 页面");
+                    startActivity(new Intent(this,ServiceWebActivity.class).putExtra("url",raw));
                     result.success(true);return;
                 }
                 if(call.method.equals("permissions")){
@@ -87,24 +83,10 @@ public class MainActivity extends FlutterActivity {
                     case "experiment":s.configure(new JSONObject((Map<?,?>)call.arguments));break;
                     case "disableExperiment":s.disableExperiment();break;
                     case "clearLocal":s.clearLocal();break;
-                    case "deleteServer":s.beginDataMaintenance();io.execute(()->{try{
-                        String id=call.argument("deviceId");if(id==null)throw new IllegalStateException("请先同步设备");
-                        s.api().request("POST","/v1/consents",new JSONObject().put("scope","upload").put("granted",false).put("policy_version","demo-1"));
-                        Object deleted=RingService.jsonValue(s.api().request("DELETE","/v1/devices/"+id+"/data?confirmation=delete_health_data",null));
-                        main.post(()->result.success(deleted));
-                    }catch(Exception e){main.post(()->result.error("delete_failed",e.getMessage(),null));}
-                    finally{main.post(s::endDataMaintenance);}});return;
                     case "exportLocal":exportDocument(s.exportLocal(),result);return;
-                    case "exportServer":io.execute(()->{try{
-                        String id=call.argument("deviceId");if(id==null)throw new IllegalStateException("请先同步设备");
-                        String content=s.api().request("GET","/v1/export?device_id="+id,null).toString(2);
-                        main.post(()->exportDocument(content,result));
-                    }catch(Exception e){main.post(()->result.error("export_failed",e.getMessage(),null));}});return;
                     case "stopService":s.shutdown();main.postDelayed(()->result.success(Map.of("state","服务已停止")),900);return;
                     case "sync":s.sync();break;
-                    case "remoteTest":s.remoteTest();break;
-                    case "pair":io.execute(()->{try{Object j=RingService.jsonValue(s.api().pair(call.argument("url"),call.argument("code")));main.post(()->result.success(j));}catch(Exception e){main.post(()->result.error("pair_failed",e.getMessage(),null));}});return;
-                    case "api":io.execute(()->{try{Map<?,?> body=call.argument("body");Object j=RingService.jsonValue(s.api().request(call.argument("method"),call.argument("path"),body==null?null:new JSONObject(body)));main.post(()->result.success(j));}catch(Exception e){main.post(()->result.error("api_failed",e.getMessage(),null));}});return;
+                    case "pair":{String localId=s.beginPairing();String raw=call.argument("package");io.execute(()->{try{Object j=RingService.jsonValue(s.pair(raw,localId));main.post(()->result.success(j));}catch(Exception e){main.post(()->result.error("pair_failed",e instanceof org.json.JSONException?"配对包字段缺失或无效":e.getMessage(),null));}finally{main.post(s::endDataMaintenance);}});return;}
                     default:result.notImplemented();return;
                 }result.success(s.snapshot());
             }catch(Exception e){result.error("native_error",e.getMessage(),null);}

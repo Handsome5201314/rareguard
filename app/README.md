@@ -1,18 +1,28 @@
-# RareGuard App 0.2.0
+# RareGuard 0.3.0
 
-RareGuard 是家庭夜间观察实验 App。Flutter 界面通过 Android 原生 BLE 前台服务连接 MR11；即时读数、设备历史与家长观察保存在本机，按用户授权同步到服务端。
+**唯一 APK 源工程：本仓库的 `app/`。** 所有 Android 适配、测试及 APK 构建均在此工程完成；外部厂商 Demo 仅为 SDK 参考资料，不作为应用源码或 APK 交付入口。
 
-## 开发环境
+家庭夜间观察 App。Flutter 界面通过 Android 原生 BLE 前台服务连接 MR11，真实记录与家长观察先保存在本机，再按授权同步到项目公网服务。
 
-已验证的工具链：Flutter **3.47.5**、Dart **3.13.4**、JDK **17**。Android 工程使用 Gradle wrapper **9.3.1**、Android Gradle Plugin **9.1.0**、Kotlin **2.4.0**，最低系统为 Android **API 26**。`compileSdk`、`targetSdk`、NDK 版本跟随 Flutter 配置。
+## 页面与能力
 
-安装 Flutter、Android SDK 和 JDK，将 `flutter` 加入 `PATH`，设置 `JAVA_HOME` 和 `ANDROID_HOME` 为各自本机安装目录。运行 `flutter doctor -v` 检查工具链，并接受需要的 Android SDK 许可。请使用仓库中的 Gradle wrapper；系统安装的 Gradle 无须与工程版本一致。
+- **今夜**：设备状态、即时心率/血氧/皮温、60 秒单项测量、实验夜间心率血氧交替采集、发作观察、报告与提醒。
+- **记录**：设备事件和家长观察；发生时间与记录时间分别保存。
+- **助手**：在应用内打开 Octop，使用 Dravet 项目助手管理单患者只读连接与会话。
+- **我的**：戒指连接与历史、配对授权、实验规则和数据管理。
 
-以下命令均在本目录 `app/` 执行。`android/local.properties` 由本机 Flutter 构建流程生成，其中 SDK 路径不能提交。
+首页仅显示 `live_device` 即时读数。历史不填入最近采样、不填补采样空窗。血糖、血压、压力和 HRV 入口保留并标注厂商返回值及尚未核验的医学准确性。皮温不等同于核心体温。ECG、原始 PPG、RRI 暂无已验证协议。
 
-### Windows / PowerShell
+三轴连续读取已在另一会话电脑端实测，本版本尚未接入运动采集。静置波动或手动抖动不能证明痉挛识别能力；单位、坐标标定、采样率和长时间覆盖仍待核验。
+
+## Windows 构建
+
+在本仓库的 `app/` 目录运行；Android 工具链按本机环境配置。
 
 ```powershell
+$env:JAVA_HOME = '<path-to-jdk-17>'
+$env:ANDROID_HOME = '<path-to-android-sdk>'
+$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
 flutter pub get
 flutter analyze --no-pub
 flutter test --no-pub
@@ -20,53 +30,30 @@ flutter test --no-pub
 flutter build apk --release --no-pub
 ```
 
-### macOS / Linux / Bash
+APK：`build/app/outputs/flutter-apk/app-release.apk`；包名 `org.rareguard.rareguard`；版本 `0.3.0+3`；最低 API 26。沿用工程现有 debug 签名构建 release 测试包，正式发布签名尚未配置。当前 SHA-256：`32A952433762D696F97D69672B8BF08A1D43E37E4C87FB08244700AD36B229BF`。
 
-```bash
-flutter pub get
-flutter analyze --no-pub
-flutter test --no-pub
-bash scripts/check_core.sh
-flutter build apk --release --no-pub
+```powershell
+adb -s <device-serial> install -r .\build\app\outputs\flutter-apk\app-release.apk
 ```
 
-两份 `check_core` 脚本都优先使用 `JAVA_HOME/bin`，未设置 `JAVA_HOME` 时使用 `PATH` 中的 `javac` 和 `java`。检查只编译独立 Java 协议与实验规则，不需要戒指、平板、Android SDK 或联网服务；测试帧和界面测试均为合成样本。
+## 数据与公网
 
-APK 输出：`build/app/outputs/flutter-apk/app-release.apk`。包名：`org.rareguard.rareguard`。当前 release 构建使用开发机的 **debug 签名**，用于开发测试；正式发布签名尚未配置。仓库不包含 keystore 或签名密码，不要提交这些文件。
+采集路径为 `RingService → LocalStore → NativeController → Flutter`。Android Keystore 加密保存配对凭据，私有 SQLite 保存记录，网络失败保留待同步状态。摘要与离散图使用明确窗口，分页截断有说明；切换窗口清除旧摘要及问答，拒绝迟到结果回填。
 
-连接自己的开发设备后，可运行 `adb devices`，再用 `adb -s <设备序列号> install -r build/app/outputs/flutter-apk/app-release.apk` 安装。请勿把真实序列号或健康数据写入仓库。
+- 病程管理页：`https://bingcheng.tongyimoheai.top/dravet`
+- Octop：`https://octop.tongyimoheai.top/`
+- 手机上传接口：`https://bingcheng.tongyimoheai.top/api/dravet/*`
 
-## 页面与数据流
+从“我的 → 连接与测量”启动服务，再从“我的 → 服务与隐私”粘贴病程页生成的手机配对包。手机上传凭据由 Android Keystore 加密保存；Octop 与家长账号只在内嵌网页中分别登录，不把智能体 token 注入原生层。旧 Hermes `/v1/*` 不再是本 APP 的运行协议。
 
-- **今夜**：设备状态、即时心率/血氧/皮温、60 秒单项测量、心率与血氧交替实验采集、发作观察入口、报告与提醒。
-- **记录**：设备事件及家长观察，分别保留发生时间和记录时间。
-- **助手**：按明确时间窗口向真实 Hermes 提问，显示等待、失败和完成状态。
-- **我的**：戒指连接、设备历史、服务配对、独立授权、实验规则和数据管理。
+实验默认关闭、不预填医学阈值；用户填写边界、持续时长和允许间隔，未知质量参与须明确同意。没有数据或没有提醒不等于安全；查看确认不停止规则计时。
 
-手机使用底部四入口；宽度达到 720dp 时使用侧边导航。界面入口和主题位于 `lib/`，原生 BLE 与存储位于 `android/app/src/main/java/org/rareguard/app/`，独立协议和规则位于 `org/rareguard/core/`。
+## 验证与待验边界
 
-采集路径：`RingService → LocalStore → NativeController → Flutter`。首页仅接纳 `live_device` 即时来源；`device_history` 留在历史记录中，不填补即时采样空窗。Android Keystore 加密保存配对凭据，应用私有 SQLite 保存本机记录。同步失败保留待上传状态，服务端明确确认批次后才标为已上传。
+本轮 `flutter analyze` 无问题；19 项 Flutter 流程、35 项核心协议、47 项实验规则检查通过，Android 原生数据库/配对/队列单测通过。覆盖即时/历史隔离、无效质量、测量冲突、观察时间、旧队列隔离、幂等补传、换绑拒绝、窄屏和较大字号。
 
-血糖、血压、压力和 HRV 保留厂商值入口，医学准确性尚未核验。皮温不能当作核心体温；ECG、原始 PPG、RRI 暂无已验证协议。三轴连续运动读取仍待接入本版本，尚未验证痉挛或癫痫发作识别能力。
+截图与独立评审见 `.impeccable/review/`；详细记录见 `docs/redesign-validation-20261011.md`。手机截图是在平板上模拟尺寸，不能代表卓易通真机。本轮界面检查不连接或采集戒指，避免抢占另一会话。
 
-## 服务配对与隐私
+Mate 70 Pro+ / 用户报告 HarmonyOS 7 / 卓易通的本 App BLE、后台与锁屏接收待验；Octop 真机登录/会话、病程配对、跨网络查询、长时间采集覆盖与端侧响铃待实测。服务器事件记录不等同于远程推送，APP 当前不声称具备跨手机告警送达。
 
-当前源码保留项目既有公开入口：
-
-- API：`https://rareguard.tongyimoheai.top/api`
-- 登录控制台：`https://rareguard.tongyimoheai.top/console`
-- Hermes Web：`https://rareguard.tongyimoheai.top/hermes/?profile=dravet-night`
-
-这些地址不授予访问权限。控制台与 Hermes Web 需要登录，App 业务数据需要一次性配对和相应授权。**开发和测试请使用自己部署的服务及测试家庭，不要连接生产家庭数据。** 从“我的 → 服务与隐私”填写自己的 HTTPS API 入口及该服务签发的配对码；保存的入口优先于源码默认入口。已配对设备更换家庭前应先导出所需记录并清除应用数据，避免将旧记录上传到其他家庭。
-
-公开仓库不含服务器凭据、配对码、数据库、真实测量记录或个人设备截图。服务端凭据通过服务端本机环境配置；Hermes 凭据不写入 App。上传、AI 分析、远程提醒分别授权，默认 Hermes profile 为 `dravet-night`。现有 Hermes 公网反代依赖提供上游服务的电脑 Docker 与 SSH 在线；队友可使用自己的服务部署。
-
-## 实验与验证边界
-
-实验变化提醒默认关闭，心率/血氧边界与持续时间由用户填写，不预填医学阈值。未知信号质量参与实验需要明确同意。数据缺失不算恢复，没有数据或没有提醒不代表安全；查看提醒确认也不会停止规则计时。本 App 用于观察和工程验证，不能诊断癫痫或替代临床监护。
-
-现有回归检查覆盖即时/历史隔离、无效质量、测量冲突、观察时间、窗口切换及迟到问答、窄屏和较大字号、连接页重新进入。独立 Java 检查覆盖协议解码、测量窗口及持续变化实验规则。运行上面的命令验证当前检出版本，真机 BLE 与长时间采集需另行实测。
-
-本 App 在 Mate 70 Pro+ / 卓易通中的 BLE、后台采集与锁屏接收尚未完成真机验证；另一 App 能连接同一戒指不能代替本 App 验证。双真机跨网络送达、独立查看确认和长时间采集覆盖仍需实测。当前远程提醒为轮询，不是厂商系统推送。
-
-视觉 tokens 位于 `lib/design.dart`。图片来源和 AI 生成提示词见 `assets/images/provenance.json` 及同目录的 `*.prompt.txt`；PNG 内也保留提示词元数据。图片曾使用官方 ECTRI 图像作参考，本仓库不包含官方 APK、反编译产物或参考原图，来源说明不构成第三方授权声明。
+视觉 tokens 与组件见 `lib/design.dart`、`DESIGN.md`、`.impeccable/design.json`。图源和提示词见 `assets/images/provenance.json`。独立图片进入 App，六屏效果图仅作参考，图中示例数值不得进入生产数据。

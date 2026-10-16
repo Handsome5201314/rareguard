@@ -23,8 +23,10 @@ mkdir -p -- "$rg_output"
     "$rg_main/EfeProtocol.java" \
     "$rg_main/MeasurementWindow.java" \
     "$rg_main/ChangeRule.java" \
+    "$rg_main/DravetPolicy.java" \
     "$rg_test/CoreChecks.java" \
-    "$rg_test/RuleChecks.java"
-for rg_class in CoreChecks RuleChecks; do
+    "$rg_test/RuleChecks.java" \
+    "$rg_test/DravetChecks.java"
+for rg_class in CoreChecks RuleChecks DravetChecks; do
     "$rg_java" -ea -cp "$rg_output" "org.rareguard.core.$rg_class"
 done

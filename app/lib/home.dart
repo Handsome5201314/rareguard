@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,20 +9,21 @@ import 'native_controller.dart';
 part 'collection_pages.dart';
 part 'service_pages.dart';
 
-const publicBusinessUrl = 'https://rareguard.tongyimoheai.top/api';
-const publicHermesUrl =
-    'https://rareguard.tongyimoheai.top/hermes/?profile=dravet-night';
-const publicConsoleUrl = 'https://rareguard.tongyimoheai.top/console';
+const publicBusinessUrl = 'https://bingcheng.tongyimoheai.top';
+const publicOctopUrl = 'https://octop.tongyimoheai.top/';
+const publicConsoleUrl = '$publicBusinessUrl/dravet';
 const names = {
   'hr': '心率',
   'spo2': '血氧',
   'bp': '血压',
   'bp_sys': '收缩压',
   'bp_dia': '舒张压',
+  'bp_hr': '血压心率',
   'temp': '皮温',
   'glu': '血糖',
   'stress': '厂商压力值',
   'hrv': '厂商 HRV 值',
+  'pi': '灌注指数',
 };
 
 class Home extends StatefulWidget {
@@ -38,29 +40,23 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
   bool observationOpen = false;
   String metric = 'hr';
   List<Map<String, dynamic>> trend = [];
-  List<Map<String, dynamic>> reportPoints = [];
-  bool reportTruncated = false;
-  Map<String, dynamic>? me, summary, ai;
-  DateTime from = DateTime.now().subtract(const Duration(hours: 12)),
-      to = DateTime.now(),
-      occurred = DateTime.now();
-  final url = TextEditingController(text: publicBusinessUrl),
-      code = TextEditingController(),
-      note = TextEditingController(),
-      question = TextEditingController();
+  String reportMetric = 'hr';
+  int reportWindowHours = 12;
+  List<Map<String, dynamic>> reportRows = [];
+  bool reportLoading = false;
+  bool reportRequested = false;
+  String? reportError;
+  DateTime occurred = DateTime.now();
+  final note = TextEditingController(),
+      pairingPackage = TextEditingController();
   final low = TextEditingController(),
       high = TextEditingController(),
       oxygen = TextEditingController(),
       duration = TextEditingController(),
       gap = TextEditingController();
-  bool unknown = false,
-      experiment = false,
-      experimentLoaded = false,
-      serverUrlLoaded = false;
+  bool unknown = false, experiment = false, experimentLoaded = false;
+  bool showPairingPackage = false;
   int signals = 1;
-  Timer? aiPoll;
-  String? aiQuestion;
-  int windowRevision = 0;
   @override
   void initState() {
     super.initState();
@@ -69,11 +65,6 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
   }
 
   void refresh() {
-    final savedUrl = c.state['serverUrl'] as String?;
-    if (!serverUrlLoaded && savedUrl != null && savedUrl.isNotEmpty) {
-      serverUrlLoaded = true;
-      if (url.text == publicBusinessUrl) url.text = savedUrl;
-    }
     final p = c.state['experiment'] as Map?;
     if (!experimentLoaded && p != null) {
       experimentLoaded = true;
@@ -91,20 +82,9 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
 
   @override
   void dispose() {
-    aiPoll?.cancel();
     c.removeListener(refresh);
     c.dispose();
-    for (final t in [
-      url,
-      code,
-      note,
-      question,
-      low,
-      high,
-      oxygen,
-      duration,
-      gap,
-    ]) {
+    for (final t in [note, pairingPackage, low, high, oxygen, duration, gap]) {
       t.dispose();
     }
     super.dispose();
@@ -112,19 +92,6 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
 
   void run(Future<void> Function() f) {
     unawaited(c.action(f));
-  }
-
-  Future<void> loadMe() async {
-    me = await c.api('/v1/me');
-    if (mounted) setState(() {});
-  }
-
-  String? get serverDevice {
-    final d = me?['devices'] as List?;
-    final local = c.state['serverDeviceId'] as String?;
-    if (d == null || d.isEmpty) return null;
-    if (local != null && d.any((r) => r['id'] == local)) return local;
-    return (d.first as Map)['id'] as String?;
   }
 
   String stamp(dynamic ms) {
@@ -141,7 +108,56 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
   String numText(dynamic v) => (v as num).toDouble().toStringAsFixed(
     (v.toDouble() % 1).abs() < 0.001 ? 0 : 1,
   );
-  void openDetail(String route) => setState(() => detailPage = route);
+  void openDetail(String route) {
+    setState(() => detailPage = route);
+    if (route == 'report' && !reportRequested) {
+      reportRequested = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(loadReport());
+      });
+    }
+  }
+
+  Future<void> loadReport() async {
+    if (reportLoading) return;
+    setState(() {
+      reportLoading = true;
+      reportError = null;
+    });
+    try {
+      final rows = await c.call('samples', {
+        'metric': reportMetric,
+        'liveOnly': true,
+      });
+      final cutoff = DateTime.now().millisecondsSinceEpoch -
+          reportWindowHours * 60 * 60 * 1000;
+      reportRows = (rows as List)
+          .map((r) => Map<String, dynamic>.from(r as Map))
+          .where((r) => r['receivedMs'] is num)
+          .where((r) => (r['receivedMs'] as num).toInt() >= cutoff)
+          .toList()
+        ..sort(
+          (a, b) => (a['receivedMs'] as num).compareTo(
+            b['receivedMs'] as num,
+          ),
+        );
+    } catch (e) {
+      reportError = e.toString();
+      reportRows = [];
+    } finally {
+      if (mounted) setState(() => reportLoading = false);
+    }
+  }
+
+  void changeReportFilter({String? metric, int? hours}) {
+    setState(() {
+      if (metric != null) reportMetric = metric;
+      if (hours != null) reportWindowHours = hours;
+      reportRequested = false;
+      reportRows = [];
+    });
+    unawaited(loadReport());
+  }
   void selectPage(int index) => setState(() {
     page = index;
     detailPage = null;
@@ -151,17 +167,6 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
     detailPage = null;
     observationOpen = true;
     occurred = DateTime.now();
-  });
-  void updateWindow(DateTime start, DateTime end) => setState(() {
-    windowRevision++;
-    from = start;
-    to = end;
-    summary = null;
-    reportPoints = [];
-    reportTruncated = false;
-    ai = null;
-    aiQuestion = null;
-    aiPoll?.cancel();
   });
   String age(dynamic ms) {
     if (ms == null || ms == 0) return '尚未收到';
@@ -233,6 +238,15 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
       ),
     ),
   );
+  String reportAge(dynamic ms) {
+    if (ms == null) return '暂无';
+    final elapsed = DateTime.now().millisecondsSinceEpoch - (ms as num).toInt();
+    if (elapsed < 0) return '设备时间在未来';
+    final minutes = elapsed ~/ 60000;
+    if (minutes < 1) return '刚刚';
+    if (minutes < 60) return '$minutes 分钟前';
+    return '${minutes ~/ 60} 小时前';
+  }
   Future<DateTime?> pick(DateTime value) async {
     final day = await showDatePicker(
       context: context,
@@ -313,6 +327,8 @@ class _HomeState extends State<Home> with _CollectionPages, _ServicePages {
                         ),
                       if (c.state['error']?.toString().isNotEmpty == true)
                         message('${c.state['error']}', warning: true),
+                      if (c.state['wearingReminder']?.toString().isNotEmpty == true)
+                        message('${c.state['wearingReminder']}', warning: true),
                       ...children,
                     ],
                   ),

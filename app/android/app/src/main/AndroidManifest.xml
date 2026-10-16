@@ -15,6 +15,7 @@
         android:usesCleartextTraffic="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <activity android:name=".ServiceWebActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
         <service android:name="org.rareguard.app.RingService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <activity
             android:name=".MainActivity"

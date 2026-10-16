@@ -16,7 +16,9 @@ import java.util.UUID;
 
 /** Private app storage. Raw device wall time is never silently converted to UTC. */
 public final class LocalStore extends SQLiteOpenHelper {
-    public LocalStore(Context context) { super(context,"rareguard.db",null,2); }
+    private final String sessionId=UUID.randomUUID().toString();
+    private long sequence;
+    public LocalStore(Context context) { super(context,"rareguard.db",null,3); }
     @Override public void onConfigure(SQLiteDatabase db) { db.setForeignKeyConstraintsEnabled(true); }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE devices (id TEXT PRIMARY KEY,address TEXT NOT NULL UNIQUE,name TEXT NOT NULL,firmware TEXT,server_id TEXT)");
@@ -26,10 +28,38 @@ public final class LocalStore extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE outbox (id TEXT PRIMARY KEY,device_id TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',error TEXT,created_ms INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE alert_outbox (id TEXT PRIMARY KEY,payload TEXT NOT NULL)");
         db.execSQL("ALTER TABLE events ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0");
+        migrateDravet(db);
     }
     @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
-        if(oldVersion==1&&newVersion==2){db.execSQL("CREATE TABLE alert_outbox (id TEXT PRIMARY KEY,payload TEXT NOT NULL)");db.execSQL("ALTER TABLE events ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0");}
-        else throw new IllegalStateException("No migration registered for this database version");
+        if(oldVersion<1 || newVersion!=3)throw new IllegalStateException("No migration registered for this database version");
+        if(oldVersion<2){db.execSQL("CREATE TABLE alert_outbox (id TEXT PRIMARY KEY,payload TEXT NOT NULL)");db.execSQL("ALTER TABLE events ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0");}
+        if(oldVersion<3)migrateDravet(db);
+    }
+    private void migrateDravet(SQLiteDatabase db) {
+        // No backfill: previous records and old outboxes retain their original ownership.
+        db.execSQL("ALTER TABLE samples ADD COLUMN upload_scope TEXT");
+        db.execSQL("ALTER TABLE samples ADD COLUMN session_id TEXT");
+        db.execSQL("ALTER TABLE samples ADD COLUMN sample_sequence INTEGER");
+        db.execSQL("ALTER TABLE events ADD COLUMN upload_scope TEXT");
+        db.execSQL("ALTER TABLE events ADD COLUMN session_id TEXT");
+        db.execSQL("CREATE TABLE dravet_binding (id INTEGER PRIMARY KEY CHECK(id=1),scope TEXT NOT NULL,local_id TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE dravet_outbox (id TEXT PRIMARY KEY,scope TEXT NOT NULL,local_id TEXT NOT NULL,payload TEXT NOT NULL,created_ms INTEGER NOT NULL)");
+    }
+    public synchronized void bindDravet(String scope,String localId) {
+        SQLiteDatabase db=getWritableDatabase();
+        checkBinding(scope,localId);
+        ContentValues v=new ContentValues();v.put("id",1);v.put("scope",scope);v.put("local_id",localId);
+        db.insertWithOnConflict("dravet_binding",null,v,SQLiteDatabase.CONFLICT_REPLACE);
+    }
+    public synchronized void checkBinding(String scope,String localId) {
+        SQLiteDatabase db=getWritableDatabase();
+        try(Cursor c=db.rawQuery("SELECT scope,local_id FROM dravet_binding WHERE id=1",null)) {
+            if(c.moveToFirst())org.rareguard.core.DravetPolicy.sameBinding(c.getString(0),c.getString(1),scope,localId);
+        }
+    }
+    private String captureScope(String localId) {
+        if(localId==null)return null;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT scope FROM dravet_binding WHERE id=1 AND local_id=?",new String[]{localId})) {return c.moveToFirst()?c.getString(0):null;}
     }
     public synchronized String device(String address,String name) {
         SQLiteDatabase db=getWritableDatabase();
@@ -59,7 +89,10 @@ public final class LocalStore extends SQLiteOpenHelper {
                 v.put("received_at",Instant.ofEpochMilli(receivedMs).toString());v.put("received_ms",receivedMs);
                 v.put("device_local_time",frame.deviceLocalTime);v.put("vendor_sequence",frame.index);
                 v.put("decoder_version",EfeProtocol.VERSION);v.put("raw_hex",EfeProtocol.hex(raw));
-                if(!frame.live || (!value.metric.equals("hr") && !value.metric.equals("spo2"))) v.put("sync_state","local_only");
+                String scope=captureScope(deviceId);
+                v.put("session_id",sessionId);v.put("sample_sequence",sequence++);
+                if(scope!=null && org.rareguard.core.DravetPolicy.uploadable(frame.live,value.metric,value.value))v.put("upload_scope",scope);
+                else v.put("sync_state","local_only");
                 if(db.insertWithOnConflict("samples",null,v,SQLiteDatabase.CONFLICT_IGNORE)!=-1) inserted++;
             }
             db.setTransactionSuccessful();
@@ -74,10 +107,12 @@ public final class LocalStore extends SQLiteOpenHelper {
         if(text.trim().isEmpty() || text.length()>2000) throw new IllegalArgumentException("记录内容需为 1–2000 字");
         ContentValues v=new ContentValues(); v.put("id",UUID.randomUUID().toString());v.put("device_id",deviceId);
         v.put("kind",kind);v.put("text",text);v.put("occurred_ms",occurredMs);v.put("recorded_ms",System.currentTimeMillis());
+        v.put("upload_scope",captureScope(deviceId));v.put("session_id",sessionId);
         getWritableDatabase().insertOrThrow("events",null,v);
     }
     public static final class Sample {
-        public String id,deviceId,metric,unit,source,quality,observedAt,receivedAt,deviceLocalTime,syncState,rawHex;
+        public String id,deviceId,metric,unit,source,quality,observedAt,receivedAt,deviceLocalTime,syncState,rawHex,sessionId,uploadScope;
+        public long sampleSequence;
         public double value;
         public long receivedMs;
         public int sequence;
@@ -90,7 +125,8 @@ public final class LocalStore extends SQLiteOpenHelper {
         s.observedAt=c.getString(c.getColumnIndexOrThrow("observed_at"));s.receivedAt=c.getString(c.getColumnIndexOrThrow("received_at"));
         s.receivedMs=c.getLong(c.getColumnIndexOrThrow("received_ms"));s.deviceLocalTime=c.getString(c.getColumnIndexOrThrow("device_local_time"));
         s.syncState=c.getString(c.getColumnIndexOrThrow("sync_state"));s.rawHex=c.getString(c.getColumnIndexOrThrow("raw_hex"));
-        s.sequence=c.getInt(c.getColumnIndexOrThrow("vendor_sequence"));return s;
+        s.sequence=c.getInt(c.getColumnIndexOrThrow("vendor_sequence"));
+        s.sessionId=c.getString(c.getColumnIndexOrThrow("session_id"));s.uploadScope=c.getString(c.getColumnIndexOrThrow("upload_scope"));s.sampleSequence=c.getLong(c.getColumnIndexOrThrow("sample_sequence"));return s;
     }
     public synchronized List<Sample> samples(String deviceId,String metric,long fromMs,long toMs,boolean liveOnly,int limit) {
         List<Sample> result=new ArrayList<>(); if(deviceId==null) return result;
@@ -120,64 +156,55 @@ public final class LocalStore extends SQLiteOpenHelper {
         return result;
     }
     public synchronized int pendingCount() {
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT count(*) FROM samples WHERE sync_state IN ('pending','sending')",null)) {c.moveToFirst();return c.getInt(0);}
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT count(*) FROM samples WHERE upload_scope IS NOT NULL AND sync_state IN ('pending','sending')",null)){c.moveToFirst();return c.getInt(0);}
     }
-    public synchronized List<Sample> pending(String deviceId,int limit) {
-        List<Sample> result=new ArrayList<>();
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT * FROM samples WHERE device_id=? AND sync_state='pending' ORDER BY received_ms,id LIMIT ?",new String[]{deviceId,Integer.toString(limit)})) {while(c.moveToNext()) result.add(sample(c));}
-        return result;
-    }
-    public synchronized String serverId(String deviceId) {
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT server_id FROM devices WHERE id=?",new String[]{deviceId})) {return c.moveToFirst()?c.getString(0):null;}
-    }
-    public synchronized void bindServer(String deviceId,String serverId) {
-        ContentValues v=new ContentValues();v.put("server_id",serverId);getWritableDatabase().update("devices",v,"id=?",new String[]{deviceId});
+    public synchronized int legacyPending() {
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT count(*) FROM samples WHERE upload_scope IS NULL AND sync_state IN ('pending','sending')",null)){c.moveToFirst();return c.getInt(0);}
     }
     public synchronized List<Sample> allSamples() {
         List<Sample> result=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT * FROM samples ORDER BY received_ms,id",null)) {while(c.moveToNext()) result.add(sample(c));}return result;
     }
     public synchronized void clearHealthData() {
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
-        try {db.delete("outbox",null,null);db.delete("alert_outbox",null,null);db.delete("samples",null,null);db.delete("events",null,null);db.setTransactionSuccessful();}
+        try {db.delete("dravet_outbox",null,null);db.delete("outbox",null,null);db.delete("alert_outbox",null,null);db.delete("samples",null,null);db.delete("events",null,null);db.setTransactionSuccessful();}
         finally {db.endTransaction();}
     }
-    public synchronized String createBatch(String deviceId,String serverId) throws org.json.JSONException {
-        SQLiteDatabase db=getWritableDatabase(); db.beginTransaction();
+    public synchronized String createBatch(String localId,String scope) throws org.json.JSONException {
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
         try {
-            try(Cursor c=db.rawQuery("SELECT payload FROM outbox WHERE device_id=? AND status='pending' ORDER BY created_ms LIMIT 1",new String[]{deviceId})) {
-                if(c.moveToFirst()) {db.setTransactionSuccessful();return c.getString(0);}
+            try(Cursor c=db.rawQuery("SELECT payload FROM dravet_outbox WHERE local_id=? AND scope=? ORDER BY created_ms,id LIMIT 1",new String[]{localId,scope})) {
+                if(c.moveToFirst()){db.setTransactionSuccessful();return c.getString(0);}
             }
-            List<Sample> rows=pending(deviceId,200); if(rows.isEmpty()) {db.setTransactionSuccessful();return null;}
-            String batchId=UUID.randomUUID().toString(); org.json.JSONArray samples=new org.json.JSONArray();
-            for(Sample s:rows) {
-                org.json.JSONObject j=new org.json.JSONObject();
-                j.put("sample_id",s.id);j.put("metric",s.metric);j.put("value",s.value);j.put("unit",s.unit);
-                j.put("source",s.source);j.put("quality",s.quality);j.put("observed_at",s.observedAt);j.put("phone_received_at",s.receivedAt);
-                j.put("time_basis","phone_receive");j.put("vendor_sequence",s.sequence);j.put("decoder_version",EfeProtocol.VERSION);
-                j.put("device_local_time",s.deviceLocalTime==null?org.json.JSONObject.NULL:s.deviceLocalTime);samples.put(j);
-                ContentValues update=new ContentValues();update.put("sync_state","sending");update.put("batch_id",batchId);db.update("samples",update,"id=?",new String[]{s.id});
+            org.json.JSONArray points=new org.json.JSONArray();String id=UUID.randomUUID().toString();
+            try(Cursor c=db.rawQuery("SELECT * FROM samples WHERE device_id=? AND upload_scope=? AND sync_state='pending' ORDER BY received_ms,id LIMIT 200",new String[]{localId,scope})) {
+                while(c.moveToNext()) {
+                    Sample v=sample(c);
+                    org.json.JSONObject j=new org.json.JSONObject().put("id",v.id).put("sessionId",v.sessionId).put("sequence",v.sampleSequence)
+                        .put("sampledAt",v.receivedAt).put("receivedAt",v.receivedAt).put("timeSource","phone_received")
+                        .put("rawTimestamp",v.deviceLocalTime==null?org.json.JSONObject.NULL:v.deviceLocalTime)
+                        .put("source","measured").put("quality",v.quality).put("kind",v.metric).put("value",v.value).put("unit",v.unit);
+                    points.put(j);
+                    ContentValues update=new ContentValues();update.put("sync_state","sending");update.put("batch_id",id);db.update("samples",update,"id=? AND upload_scope=?",new String[]{v.id,scope});
+                }
             }
-            String payload=new org.json.JSONObject().put("schema_version",1).put("batch_id",batchId).put("device_id",serverId).put("app_version","0.1.0").put("samples",samples).toString();
-            ContentValues v=new ContentValues();v.put("id",batchId);v.put("device_id",deviceId);v.put("payload",payload);v.put("created_ms",System.currentTimeMillis());
-            db.insertOrThrow("outbox",null,v);db.setTransactionSuccessful();return payload;
+            if(points.length()==0){db.setTransactionSuccessful();return null;}
+            String payload=new org.json.JSONObject().put("batchId",id).put("samples",points).toString();
+            ContentValues v=new ContentValues();v.put("id",id);v.put("scope",scope);v.put("local_id",localId);v.put("payload",payload);v.put("created_ms",System.currentTimeMillis());
+            db.insertOrThrow("dravet_outbox",null,v);db.setTransactionSuccessful();return payload;
         } finally {db.endTransaction();}
     }
-    public synchronized void batchCommitted(String id) {
+    public synchronized void batchCommitted(String id,String scope) {
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
-        try {ContentValues v=new ContentValues();v.put("sync_state","uploaded");db.update("samples",v,"batch_id=?",new String[]{id});db.delete("outbox","id=?",new String[]{id});db.setTransactionSuccessful();}
+        try {ContentValues v=new ContentValues();v.put("sync_state","uploaded");db.update("samples",v,"batch_id=? AND upload_scope=?",new String[]{id,scope});db.delete("dravet_outbox","id=? AND scope=?",new String[]{id,scope});db.setTransactionSuccessful();}
         finally {db.endTransaction();}
     }
-    public synchronized void queueAlert(org.json.JSONObject j) throws org.json.JSONException {
-        ContentValues v=new ContentValues();v.put("id",j.getString("id"));v.put("payload",j.toString());getWritableDatabase().insertOrThrow("alert_outbox",null,v);
-    }
-    public synchronized List<org.json.JSONObject> pendingAlerts() throws org.json.JSONException {
-        List<org.json.JSONObject> result=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT payload FROM alert_outbox",null)){while(c.moveToNext())result.add(new org.json.JSONObject(c.getString(0)));}return result;
-    }
-    public synchronized void alertCommitted(String id){getWritableDatabase().delete("alert_outbox","id=?",new String[]{id});}
-    public synchronized List<org.json.JSONObject> observations(String deviceId,String serverId) throws org.json.JSONException {
+    public synchronized List<org.json.JSONObject> pendingEvents(String scope) throws org.json.JSONException {
         List<org.json.JSONObject> result=new ArrayList<>();
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,text,occurred_ms FROM events WHERE device_id=? AND kind='observation' AND uploaded=0 LIMIT 100",new String[]{deviceId})){
-            while(c.moveToNext())result.add(new org.json.JSONObject().put("id",c.getString(0)).put("device_id",serverId).put("text",c.getString(1)).put("occurred_at",Instant.ofEpochMilli(c.getLong(2)).toString()));}return result;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,session_id,kind,text,occurred_ms FROM events WHERE upload_scope=? AND uploaded=0 AND kind IN ('observation','alarm_requested','collection_error','connected','disconnected') ORDER BY recorded_ms,id LIMIT 100",new String[]{scope})) {
+            while(c.moveToNext())result.add(new org.json.JSONObject().put("id",c.getString(0)).put("sessionId",c.getString(1)).put("kind",c.getString(2))
+                .put("occurredAt",Instant.ofEpochMilli(c.getLong(4)).toString()).put("source","measured").put("relatedEventId",org.json.JSONObject.NULL)
+                .put("ruleVersion",org.json.JSONObject.NULL).put("note",c.getString(3)));
+        }return result;
     }
-    public synchronized void observationCommitted(String id){ContentValues v=new ContentValues();v.put("uploaded",1);getWritableDatabase().update("events",v,"id=?",new String[]{id});}
+    public synchronized void eventCommitted(String id,String scope){ContentValues v=new ContentValues();v.put("uploaded",1);getWritableDatabase().update("events",v,"id=? AND upload_scope=?",new String[]{id,scope});}
 }

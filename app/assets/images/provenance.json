@@ -1,5 +1,5 @@
 {
-  "reference_sources": "Official ECTRI ring and moon-cloud imagery, and the project RareGuard UI reference. Reference originals are not included in this repository; provenance is not a third-party license grant.",
+  "source_directory": "output/imagegen/rareguard-20261010",
   "source_manifest": "delivery-manifest.json",
   "model": "gpt-image-2",
   "method": "image-to-image, images/edits",

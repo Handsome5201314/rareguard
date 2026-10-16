@@ -50,37 +50,12 @@ jobs:
     defaults:
       run:
         working-directory: server
-    services:
-      postgres:
-        image: postgres:17.6-alpine
-        env:
-          POSTGRES_USER: rareguard
-          POSTGRES_DB: rareguard
-          POSTGRES_PASSWORD: ci-test-only
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U rareguard -d rareguard"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 12
-    env:
-      DATABASE_URL: postgresql+psycopg://rareguard:ci-test-only@127.0.0.1:5432/rareguard
-      TEST_DATABASE_URL: postgresql+psycopg://rareguard:ci-test-only@127.0.0.1:5432/rareguard_test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-      - run: python -m pip install -r requirements.txt
-      - run: python -m alembic upgrade head
-      - name: Create disposable test database
-        run: |
-          python - <<'PY'
-          import os
-          import psycopg
-          url = os.environ['DATABASE_URL'].replace('postgresql+psycopg://', 'postgresql://', 1)
-          with psycopg.connect(url, autocommit=True) as connection:
-              connection.execute('CREATE DATABASE rareguard_test')
-          PY
-      - run: python -m pytest -q
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm test
