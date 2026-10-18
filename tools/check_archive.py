@@ -84,7 +84,7 @@ def main():
         if set(archive.namelist()) != {f'dravet-monitor-plugin/{name}' for name in expected} or len(archive.namelist()) != len(expected):
             raise ValueError('Plugin ZIP contains unexpected or duplicate members')
         for name in expected:
-            if archive.read(f'dravet-monitor-plugin/{name}') != (source / name).read_bytes():
+            if archive.read(f'dravet-monitor-plugin/{name}') != (source / name).read_bytes().replace(b'\r\n', b'\n'):
                 raise ValueError(f'Plugin ZIP differs from source: {name}')
     for path in (ROOT / 'plugins').rglob('*.py'):
         if '__pycache__' not in path.parts:

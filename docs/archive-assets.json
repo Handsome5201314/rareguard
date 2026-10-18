@@ -60,7 +60,7 @@
     },
     {
       "path": "octop/dravet-monitor-plugin-0.1.0.zip",
-      "sha256": "32c1b45baffc6e3f9e9ea8d8c77fe18325c4f4b1d54b3031a9d2681cd8b4422b",
+      "sha256": "a08a4d2a22c60658ef6e03fe7b762dfd431d89c205fefe99221b127d920ad394",
       "source": "Current plugins/dravet-monitor-plugin source; real Octop installer verified; six files only"
     }
   ]

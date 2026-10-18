@@ -26,7 +26,10 @@ def build():
         assert (b'-----BEGIN ' + b'PRIVATE KEY-----') not in data, 'Private key found in ' + name
     with zipfile.ZipFile(OUTPUT, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         for name in FILES:
-            archive.write(SOURCE / name, 'dravet-monitor-plugin/' + name)
+            # All six release files are UTF-8 text. Match Git's canonical LF
+            # representation even when the checkout uses Windows CRLF.
+            archive.writestr('dravet-monitor-plugin/' + name,
+                             (SOURCE / name).read_bytes().replace(b'\r\n', b'\n'))
     with zipfile.ZipFile(OUTPUT) as archive:
         assert archive.testzip() is None, 'ZIP CRC mismatch'
         assert set(archive.namelist()) == {'dravet-monitor-plugin/' + name for name in FILES}

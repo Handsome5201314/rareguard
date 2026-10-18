@@ -23,7 +23,7 @@
 python plugins/tests/package_dravet_plugin.py
 ```
 
-安装包仅包含 `main.py`、`client.py`、`storage.py`、`plugin.yaml`、`requirements.txt`、`README.md`，不包含缓存或私有状态。打包脚本写入 `plugins/dist/` 并通过真实 Octop 安装器验证 ZIP；更新公开归档时，再将核对后的安装包复制到本目录并更新 `docs/archive-assets.json`。这里的公开安装包与当前源码逐文件一致。
+安装包仅包含 `main.py`、`client.py`、`storage.py`、`plugin.yaml`、`requirements.txt`、`README.md`，不包含缓存或私有状态。打包脚本按 Git 的 LF 换行写入 `plugins/dist/` 并通过真实 Octop 安装器验证 ZIP；更新公开归档时，再将核对后的安装包复制到本目录并更新 `docs/archive-assets.json`。这里的公开安装包与当前提交源码一致。
 
 集成测试使用真实 Octop loader、ToolNode、MCP SDK 和临时 Node 服务，不使用生产绑定：
 
