@@ -1,5 +1,7 @@
 # 协作开发
 
+公开附件与智能体模板的归档还需执行 `python -m unittest discover -s tools -p 'test_*.py'` 和 `python tools/check_archive.py`（需要 `pypdf`）。新增图片、PDF、PPTX 或 ZIP 先做隐私核对，再按精确路径与 SHA-256 登记 `docs/archive-assets.json`，不扩大整个目录的二进制白名单。模板保留待配置状态，实际用户记忆留在独立私有工作区。
+
 从 `main` 创建功能分支，通过 Pull Request 说明问题、改动和验证。App、网页与 API 契约变更在同一 PR 中提交，避免不能联调的版本。
 
 ## 模块边界
