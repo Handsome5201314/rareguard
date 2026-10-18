@@ -53,3 +53,14 @@
 **/ectri-reverse/
 **/jadx/
 **/apktool/
+
+
+# Web / Node builds and private plugin state
+**/node_modules/
+**/dist/
+**/family-data/
+**/family-test-data/
+**/private/
+**/bindings.sqlite*
+**/key.bin
+**/references/
