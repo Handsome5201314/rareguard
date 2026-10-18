@@ -1,0 +1,7 @@
+id: family-medical-plugin
+version: 0.1.0
+name: 病程本家庭助手
+description: 用本人专属连接包绑定病程本，在对话中维护本人和孩子的档案与记录
+icon: "📘"
+kind: tool
+entry: main.py

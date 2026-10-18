@@ -1,31 +1,27 @@
 # 数据流与契约
 
-## App
+## 手机采样
 
-`MR11 → RingService → EfeProtocol / MeasurementWindow → LocalStore → NativeController → Flutter`
+`MR11 → Android RingService / EfeProtocol → LocalStore 队列 → RemoteApi → /api/dravet/* → 独立监测 SQLite`
 
-BLE 采集在 Android 前台服务中执行。`EfeProtocol` 解析即时、历史、测量状态与停止回包；命令应答不算有效采样。`MeasurementWindow` 为单次测量设定有界窗口，禁止冲突测量。官方错误码 1 为设备判定未正确佩戴，2 为未检测到有效心率，错误不能直接解释为硬件损坏。
+BLE 在 Android 前台服务中采集；历史与即时来源分开。配对凭据由 Android Keystore 加密，服务端授予独立手机上传权限。批次具有稳定 ID，服务端确认后才出队；失败保留队列并显示错误。采样的单位、质量、设备时间与手机接收时间分别保存，未经验证不互相替代。
 
-本地 SQLite 保存来源、单位、质量、手机接收时间和设备本地时间；历史时间未经校准，不替换为手机接收时间。首页只使用即时数据。配对凭据用 Android Keystore 加密，Hermes 凭据仅留在服务端。
+## 家长病程
 
-## 服务端
+`family-web → 家长会话 / CSRF → /api/family/* → 归属与版本校验 → 病程 SQLite / 加密附件`
 
-`LocalStore 待同步记录 → RemoteApi → FastAPI 授权 / schema 校验 → PostgreSQL → 窗口摘要 → Hermes worker`
+SQLite 是唯一事实来源。检验、症状、用药和就诊先保存草稿，核对当前版本后才进入摘要；修订保留历史。账号管理员没有读取其他家庭病程的权限。分享只暴露有效授权范围内的已核对摘要，可到期与撤销。
 
-API 接收端路径为 `/v1/...`；公网网关对 `/api/` 去除前缀。`/console` 使用独立密码登录、Secure Cookie、来源检查和 CSRF 校验。App 使用独立的一次性配对码交换 Bearer 凭据；每个请求校验所属家庭与操作授权。
+## 智能体协作
 
-| 接口组 | 契约 |
-| --- | --- |
-| 配对与设备 | 十分钟一次性配对码；设备登记绑定家庭 |
-| measurement-batches | `schema_version=1`，最多 500 条；来源、时间、质量与单位显式记录 |
-| observations | 发生时间与记录时间分别保存；用户输入作为资料处理 |
-| consent / alerts / receipts | 上传、AI、远程提醒分别授权；送达与查看确认分别记录 |
-| summaries / conversations | 明确窗口与时区；无数据、质量未知、分页与采样空窗不能解释为安全 |
+`Octop 可信用户上下文 → 插件每用户加密绑定 → 可撤销 MCP 授权 → 同一服务端领域校验`
 
-完整字段以 `server/server/schemas.py` 为准，路由以 `main.py` / `console.py` 为准。本地开发可通过 FastAPI `/docs` 查看接口；公共网关应按部署要求限制文档和 internal 路由。
+家庭插件按 scope 提供病程读写，敏感操作先预览并取得明确确认；Dravet 插件仅查询单患者的五个只读工具。模型不能传入用户身份、变更 scope、选择任意服务地址或控制戒指。手机凭据不能用于智能体查询，智能体只读授权不能上传。
 
-Hermes 请求需要配置真实服务，`HERMES_MODEL` 必须与返回的 model 一致，默认 profile 为 `dravet-night`。worker 验证授权、租约和超时，未配置或响应不完整时保留可观察失败状态。Agent 需单独配置为受限数据解释环境；设置 `HERMES_RESTRICTED_CONTEXT_CONFIRMED=true` 之前应确认不能运行工具或保存长期记忆。
+窗口查询采用明确时区、最多七天和显式截断。measured / replay / synthetic 来源分组，缺项、未知质量与采样空窗不能解释为正常或安全。病程与监测分别保存密钥和数据库，备份时必须一起保留各自完整数据集。
+
+权威接口见 `server/src/dravet/contracts.ts`、`server/src/server/validation.ts` 与 `server/src/shared/types.ts`；详细文档见 [服务端](../server/README.md)。旧 FastAPI / PostgreSQL / Hermes worker 不再是当前运行架构。
 
 ## 待验证能力
 
-轮询提醒不是系统厂商推送。锁屏持续采集、卓易通 BLE 与后台能力、双监护人跨网送达、连续覆盖和三轴动作算法必须通过独立实机验证。本仓库不包含真实采样或验证截图，合成测试不能替代这些验证。
+真实 MR11 配对、Android WebView 登录与会话保持、整夜 BLE 覆盖、断网补传及端侧响铃仍需实机验收。服务端只记录观察与提醒事件，不执行医学规则、推送或设备控制；技术测试不证明癫痫识别或临床预警有效性。

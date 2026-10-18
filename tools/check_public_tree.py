@@ -13,8 +13,10 @@ if not paths:
 bad_suffixes = {'.pem', '.key', '.pub', '.p12', '.pfx', '.jks', '.keystore', '.db',
                 '.sqlite', '.sqlite3', '.csv', '.log', '.har', '.pcap', '.pcapng', '.apk', '.aab'}
 bad_parts = {'.venv', '.dart_tool', '.gradle', '__pycache__', '.pytest_cache', 'build',
+             'node_modules', 'dist', 'family-data', 'family-test-data', 'private', 'references',
              'runtime', 'exports', 'captures', 'screenshots', '.impeccable', 'ectri-reverse', 'jadx', 'apktool'}
 patterns = {
+    'application-token': re.compile(r'\b(?:family_|da_|dd_|dp_)[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])'),
     'private-key': re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----'),
     'github-token': re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b'),
     'api-token': re.compile(r'\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}\b'),
@@ -28,7 +30,7 @@ for name in paths:
     if any(part in bad_parts for part in path.parts) or path.suffix.lower() in bad_suffixes:
         findings.append((name, 'private-or-generated-file'))
         continue
-    if path.name in {'local.properties', 'key.properties'} or (path.name.startswith('.env') and path.name != '.env.example'):
+    if path.name in {'local.properties', 'key.properties', 'key.bin'} or (path.name.startswith('.env') and path.name != '.env.example'):
         findings.append((name, 'private-configuration'))
         continue
     if path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp'}:

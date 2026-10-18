@@ -1,0 +1,7 @@
+id: dravet-monitor-plugin
+version: 0.1.0
+name: Dravet 夜间监测助手
+description: 单患者监测只读查询、来源与质量复盘；不控制设备或执行医学规则
+icon: "🌙"
+kind: tool
+entry: main.py

@@ -114,7 +114,7 @@ Android 和插件固定接受上述 HTTPS origin，不跟随重定向。插件�
 
 ## 5. Octop 接入
 
-源码与安装包在 `../部署/dravet-monitor-plugin/`、`../部署/dravet-monitor-plugin-0.1.0.zip`；详见插件 README。现有病程插件不需要替换，两个插件各自管理自己的授权和加密绑定。
+源码位于 [Dravet 插件](../../plugins/dravet-monitor-plugin/README.md)，安装包由 `plugins/tests/package_dravet_plugin.py` 生成到被忽略的 `plugins/dist/`；详见 [插件构建说明](../../plugins/README.md)。现有病程插件不需要替换，两个插件各自管理自己的授权和加密绑定。
 
 1. 本机已安装 0.1.0 并为 `NOA RareGuard｜Dravet 夜间监护项目助手`（`dravet-night-monitor`）启用，服务已重启加载。打开该专家的新会话；其他部署仍需在插件管理安装 ZIP 并为指定专家启用。
 2. 将网页刚生成的夜间监测只读包发到自己的可信私聊；智能体使用 `dravet_bind` 完成绑定。不要发送手机上传包，不把 token 填入智能体系统提示词。
