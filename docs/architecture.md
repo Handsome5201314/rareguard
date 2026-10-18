@@ -1,5 +1,7 @@
 # 数据流与契约
 
+2026-10-19 归档补充：[智能体初始模板](../octop/agent-template/)、[插件安装与权限](../octop/README.md)、[公开路演材料](presentation/README.md)。模板不导出实际用户记忆，演示素材不代替设备或临床验收。
+
 ## 手机采样
 
 `MR11 → Android RingService / EfeProtocol → LocalStore 队列 → RemoteApi → /api/dravet/* → 独立监测 SQLite`

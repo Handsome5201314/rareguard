@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "reviewedOn": "2026-10-19",
+  "policy": "Exact-path approvals after visual and container review; no runtime data or credentials",
+  "assets": [
+    {
+      "path": "docs/presentation/assets/app-ui-overview.jpg",
+      "sha256": "dbf71ce4f7fad6c14c116bb84ec534c4606c9cb06ce06ed1aae4b0a0d6371b33",
+      "source": "2026-10-10 project design asset; illustrative UI or product image, not measured patient data"
+    },
+    {
+      "path": "docs/presentation/assets/avatar.png",
+      "sha256": "be4f72120e9543c783542f4d1f8f98803a1d0816a0da726f39f7a2d8e5dbb497",
+      "source": "2026-10-10 project design asset; illustrative UI or product image, not measured patient data"
+    },
+    {
+      "path": "docs/presentation/assets/cloud-workbench-live.jpg",
+      "sha256": "9e1ce87bbb4b062e3052e21028f8770993b315c86bdd24e6788147e45cddeed7",
+      "source": "2026-10-15 synthetic acceptance account and synthetic patient; connection packages hidden"
+    },
+    {
+      "path": "docs/presentation/assets/night.png",
+      "sha256": "a971c584938fc3b514d87a8932225638ad2dc36bc946f67bce1d6a26b4325a66",
+      "source": "2026-10-10 project design asset; illustrative UI or product image, not measured patient data"
+    },
+    {
+      "path": "docs/presentation/assets/octop-agent-live.png",
+      "sha256": "a22bbd3bb660d649ea9f57eac30ee493f480394cbadeb1095510816071dcc066",
+      "source": "2026-10-16 Octop product screenshot; browser capture excludes bottom account region; no patient conversation"
+    },
+    {
+      "path": "docs/presentation/assets/ring.png",
+      "sha256": "f24698865e8b74abb10a46c917e75268f3c6ad1ecef5645ab1517289484b6fa3",
+      "source": "2026-10-10 project design asset; illustrative UI or product image, not measured patient data"
+    },
+    {
+      "path": "docs/presentation/assets/tonight.png",
+      "sha256": "cc9068123586c3608a9c03921758b8490796df4ed026c176e321c7313d375636",
+      "source": "2026-10-10 project design asset; illustrative UI or product image, not measured patient data"
+    },
+    {
+      "path": "docs/presentation/RareGuard-Dravet-16x9.pdf",
+      "sha256": "3ff3eda6bcb023d7943bb84a6f15f1639c0d35aeb45bd0d691c29991485a34f7",
+      "source": "Rendered from public docs/presentation/index.html with reviewed assets; 11 slides; product demo only"
+    },
+    {
+      "path": "docs/presentation/RareGuard-Dravet-wide.pdf",
+      "sha256": "12fb93403c92f7f49e0f5e0ca63f0b8aa14b5a3e2199d5a98ddf009fc98158a4",
+      "source": "Rendered from public docs/presentation/index.html with reviewed assets; 11 slides; product demo only"
+    },
+    {
+      "path": "docs/presentation/RareGuard-Dravet-16x9.pptx",
+      "sha256": "f6c1458eac16ce46fc52299eded1eceb46743b603248915f0f5b037451eb68df",
+      "source": "Rendered from public docs/presentation/index.html with reviewed assets; 11 slides; product demo only"
+    },
+    {
+      "path": "docs/presentation/RareGuard-Dravet-wide.pptx",
+      "sha256": "2e9ea0820cc66feaf0b55426e22ce2467c5ff436848b9e4c7228a8289848b7d2",
+      "source": "Rendered from public docs/presentation/index.html with reviewed assets; 11 slides; product demo only"
+    },
+    {
+      "path": "octop/dravet-monitor-plugin-0.1.0.zip",
+      "sha256": "32c1b45baffc6e3f9e9ea8d8c77fe18325c4f4b1d54b3031a9d2681cd8b4422b",
+      "source": "Current plugins/dravet-monitor-plugin source; real Octop installer verified; six files only"
+    }
+  ]
+}

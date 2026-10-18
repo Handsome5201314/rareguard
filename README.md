@@ -10,6 +10,8 @@
 | [server/](server/README.md) | Node.js 24 / TypeScript / SQLite，病程 HTTP / MCP、Dravet 上传与查询 |
 | [family-web/](family-web/README.md) | 家长病程网页、档案、核对、时间线、趋势、附件与智能体连接 |
 | [plugins/](plugins/README.md) | Octop 家庭病程与 Dravet 两个插件、合成集成测试与 ZIP 构建 |
+| [octop/](octop/README.md) | 夜间监测智能体初始模板与已验证的插件安装包 |
+| [docs/presentation/](docs/presentation/README.md) | 11 页路演 HTML、公开素材、常规版与超宽版 PDF / PPTX |
 | [docs/architecture.md](docs/architecture.md) | 数据流与权限边界 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发、验证与提交方式 |
 
@@ -37,6 +39,6 @@ App 开发需要 Flutter 3.47.5 / Dart 3.13.4、JDK 17 和 Android SDK，步骤�
 
 当前没有经临床验证的癫痫识别或动态医学预警。服务端记录观察与提醒事件，不执行医学规则、远程推送或戒指控制。真实 MR11 配对、整夜采集、断网补传、原生 WebView 登录与绑定后的 Octop 对话仍须实机验收。
 
-公共仓库只包含开发源码、合成测试和配置模板；不包含凭据、真实健康资料、设备标识、运行数据库、设备截图、官方 APK 或反编译产物。构建测试包沿用开发签名；正式签名尚未配置。
+公共仓库包含开发源码、合成测试、初始配置模板和公开路演材料；不包含凭据、真实健康资料、设备标识、运行数据库、原始设备实测截图、官方 APK 或反编译产物。路演中的 App 为设计示例，病程页面为合成测试，Octop 仅保留产品区域，来源与校验值见 [清单](docs/archive-assets.json)。构建测试包沿用开发签名；正式签名尚未配置。
 
 未选择项目开源许可证。App 图片来源见 `app/assets/images/provenance.json`，网页参考边界见 [OPEN_SOURCE](family-web/OPEN_SOURCE.md)；来源说明不代表对第三方素材的授权。历史整理记录见 [publication](docs/publication.md)。

@@ -64,3 +64,5 @@
 **/bindings.sqlite*
 **/key.bin
 **/references/
+.archive-build/
+octop/agent-runtime/
